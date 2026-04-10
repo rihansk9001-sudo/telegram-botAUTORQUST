@@ -1,48 +1,27 @@
 import os
-import threading
+import sys
+import traceback
 import asyncio
 
-# === YAHI HAI ASLI FIX ===
-# Render ka naya Python 3.14 bina Event Loop ke Pyrogram ko import nahi hone deta.
-# Isliye hum import se pehle hi zabardasti ek naya loop bana rahe hain.
+# === PYTHON 3.14 FIX (Ye Render ke naye Python ko handle karega) ===
 try:
-    asyncio.get_event_loop()
+    loop = asyncio.get_event_loop()
 except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
-# =========================
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+# ====================================================================
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from pyrogram import Client, filters
+from aiohttp import web
+from pyrogram import Client, filters, idle
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# --- 1. DUMMY WEB SERVER (Render ke liye) ---
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b"Bot is perfectly running on Render!")
-        
-    def log_message(self, format, *args):
-        pass
-
-def run_web_server():
-    port = int(os.environ.get("PORT", 8080))
-    server_address = ('0.0.0.0', port)
-    httpd = HTTPServer(server_address, DummyHandler)
-    print(f"🌐 Web Server started on port {port}")
-    httpd.serve_forever()
-
-threading.Thread(target=run_web_server, daemon=True).start()
-
-
-# --- 2. AAPKA TELEGRAM BOT CODE ---
 API_ID = 33603340
 API_HASH = "0f1a7f670519f9e44d0d7fdb6aa8efba"
 BOT_TOKEN = "7874642792:AAF08vl1-qcMUHOIUZrL5IwJS1A7zoD5ucw"
 
 app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
 
+# --- /start Command aur Button ---
 @app.on_message(filters.command("start") & filters.private)
 async def start_command(client, message):
     bot = await client.get_me()
@@ -62,6 +41,7 @@ async def start_command(client, message):
     await message.reply_text(text, reply_markup=keyboard)
 
 
+# --- /acceptall Command ---
 @app.on_message(filters.command("acceptall") & filters.admin)
 async def approve_all_requests(client, message):
     chat_id = message.chat.id
@@ -72,6 +52,41 @@ async def approve_all_requests(client, message):
     except Exception as e:
         await msg.edit_text(f"❌ Error aaya: {e}")
 
-# Bot ko Start karna
-print("🚀 BOT IS STARTING NOW...")
-app.run()
+
+# --- Web Server (Sabse pehle ye chalega taaki Render khush rahe) ---
+async def web_server():
+    async def handle(request):
+        return web.Response(text="Bot is running smoothly on Render!")
+    webapp = web.Application()
+    webapp.router.add_get('/', handle)
+    runner = web.AppRunner(webapp)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"🌐 Web Server started on port {port}", flush=True)
+
+
+# --- Main Logic ---
+async def main():
+    # 1. Pehle server start hoga taaki Render crash na kare
+    print("⏳ Web Server Start ho raha hai...", flush=True)
+    await web_server()
+    
+    # 2. Phir Telegram connect hoga
+    print("⏳ Telegram se connect ho raha hai...", flush=True)
+    await app.start()
+    
+    print("🎉 BOT IS LIVE NOW! SAB PERFECT HAI!", flush=True)
+    await idle()
+    await app.stop()
+
+
+if __name__ == "__main__":
+    print("🚀 Script Start Hui...", flush=True)
+    try:
+        # loop.run_until_complete use kiya hai taaki naya loop na banaye
+        loop.run_until_complete(main())
+    except Exception as e:
+        print(f"❌ FATAL ERROR: {e}", flush=True)
+        traceback.print_exc()
