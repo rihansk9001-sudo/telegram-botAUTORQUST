@@ -1,10 +1,21 @@
 import os
 import threading
+import asyncio
+
+# === YAHI HAI ASLI FIX ===
+# Render ka naya Python 3.14 bina Event Loop ke Pyrogram ko import nahi hone deta.
+# Isliye hum import se pehle hi zabardasti ek naya loop bana rahe hain.
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+# =========================
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# --- 1. DUMMY WEB SERVER (Render ko chup rakhne ke liye) ---
+# --- 1. DUMMY WEB SERVER (Render ke liye) ---
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -13,7 +24,7 @@ class DummyHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Bot is perfectly running on Render!")
         
     def log_message(self, format, *args):
-        pass # Faltu logs band karne ke liye
+        pass
 
 def run_web_server():
     port = int(os.environ.get("PORT", 8080))
@@ -22,7 +33,6 @@ def run_web_server():
     print(f"🌐 Web Server started on port {port}")
     httpd.serve_forever()
 
-# Web server ko ek alag raste (thread) par chala diya
 threading.Thread(target=run_web_server, daemon=True).start()
 
 
@@ -62,6 +72,6 @@ async def approve_all_requests(client, message):
     except Exception as e:
         await msg.edit_text(f"❌ Error aaya: {e}")
 
-# Pyrogram ka khud ka asli start function (jo kabhi event loop error nahi deta)
+# Bot ko Start karna
 print("🚀 BOT IS STARTING NOW...")
 app.run()
